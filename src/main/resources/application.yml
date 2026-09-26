@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: benefit-activation-engine
+
+  # ---- H2 in-memory database (demo) ----
+  datasource:
+    url: jdbc:h2:mem:benefitdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  # ---- H2 web console (Boot 4: backed by the spring-boot-h2console module) ----
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# ---- Actuator: expose health + info ----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# ---- Swagger / OpenAPI ----
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+server:
+  port: 8080
+
+# ---- Customer authentication (JWT) ----
+# Demo identity tokens for the customer UI: a card member "logs in" with just
+# their card member id and receives a signed JWT (subject = cardMemberId) that
+# scopes the /api/me/** endpoints to their own claims. This is an identity
+# token for the prototype, NOT password-based authentication.
+auth:
+  jwt:
+    # HS256 signing secret. Override in real deployments (env: AUTH_JWT_SECRET).
+    # Must be at least 32 bytes for HS256.
+    secret: ${AUTH_JWT_SECRET:change-me-benefit-activation-demo-secret-key-0123456789}
+    # Token lifetime in minutes.
+    expiry-minutes: ${AUTH_JWT_EXPIRY_MINUTES:120}
+
+# ---- Real-time purchase feed (WATCH stage delivery mechanism) ----
+# Swap the delivery mechanism with a single flag:
+#   local-scheduled -> LocalScheduledFeed (demo drip, no infra needed)
+#   pubsub          -> PubSubFeed (production subscriber; stubbed offline)
+#   none            -> no feed active
+feed:
+  type: local-scheduled
+  local:
+    interval-ms: 5000        # emit a simulated purchase every 5s
+    initial-delay-ms: 5000   # wait 5s after startup before the first emit
+    start-paused: false      # boot with the drip paused (toggle at /api/admin/feed)
+
+# ---- Matching rules (MATCH stage) ----
+# Which merchant categories qualify a purchase for each benefit type.
+# Editable here with no code changes.
+matching:
+  categories:
+    PURCHASE_PROTECTION:
+      - ELECTRONICS
+      - APPLIANCES
+    RETURN_PROTECTION:
+      - APPAREL
+      - DEPARTMENT_STORE
+      - ELECTRONICS
+    TRAVEL_DELAY:
+      - AIRLINE
+      - LODGING
+      - TRAVEL_AGENCY
+
+# ---- Approval workflow (WORKFLOW stage) ----
+# Claims at or below the threshold are auto-approved on submission;
+# larger claims are routed to manual review.
+workflow:
+  auto-approve-threshold: 700.00

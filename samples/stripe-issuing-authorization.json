@@ -1,0 +1,40 @@
+{
+  "id": "evt_1PtEST0000000000000000",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "type": "issuing_authorization.created",
+  "created": 1690000000,
+  "data": {
+    "object": {
+      "id": "iauth_1PtEST1111111111111111",
+      "object": "issuing.authorization",
+      "amount": 49999,
+      "currency": "usd",
+      "approved": true,
+      "status": "closed",
+      "created": 1690000000,
+      "merchant_data": {
+        "name": "BEST ELECTRONICS",
+        "category": "electronics_stores",
+        "category_code": "5732",
+        "city": "SAN FRANCISCO",
+        "country": "US",
+        "network_id": "1234567890"
+      },
+      "card": {
+        "id": "ic_1PtEST2222222222222222",
+        "object": "issuing.card",
+        "brand": "American Express",
+        "last4": "4242",
+        "cardholder": {
+          "id": "ich_1PtEST3333333333333333",
+          "object": "issuing.cardholder",
+          "name": "Jordan Smith"
+        },
+        "metadata": {
+          "card_product": "platinum"
+        }
+      }
+    }
+  }
+}
