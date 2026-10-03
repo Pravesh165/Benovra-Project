@@ -78,6 +78,9 @@ public class Transaction {
     @Column(length = 500)
     private String description;
 
+    @Column(name = "match_reason", length = 500)
+    private String matchReason;
+
     /** Processing state in the WATCH -> MATCH pipeline. */
     @NotNull
     @Enumerated(EnumType.STRING)

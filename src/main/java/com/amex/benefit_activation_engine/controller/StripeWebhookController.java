@@ -4,7 +4,9 @@ import com.amex.benefit_activation_engine.dto.CreateTransactionRequest;
 import com.amex.benefit_activation_engine.dto.TransactionResponse;
 import com.amex.benefit_activation_engine.integration.stripe.StripeTransactionAdapter;
 import com.amex.benefit_activation_engine.integration.stripe.StripeWebhookEvent;
+import com.amex.benefit_activation_engine.integration.stripe.StripeWebhookSignatureVerifier;
 import com.amex.benefit_activation_engine.service.IngestionService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.ConstraintViolation;
@@ -17,8 +19,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 
@@ -28,9 +34,8 @@ import java.util.Set;
  * {@link IngestionService} pipeline as the manual feed — so switching from
  * Stripe test mode to live requires no downstream changes.
  *
- * <p><b>Security note:</b> for the offline demo this endpoint does NOT verify
- * the {@code Stripe-Signature} header. Before any real deployment, add webhook
- * signature verification with the endpoint's signing secret and restrict access.</p>
+ * <p>Every request must include a valid Stripe-Signature HMAC signed with the
+ * configured endpoint secret. Missing secrets fail closed.</p>
  */
 @Slf4j
 @RestController
@@ -44,18 +49,33 @@ public class StripeWebhookController {
     private final StripeTransactionAdapter adapter;
     private final IngestionService ingestionService;
     private final Validator validator;
+    private final StripeWebhookSignatureVerifier signatureVerifier;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping("/webhook")
     @Operation(summary = "Receive a Stripe Issuing event",
             description = "Maps issuing_authorization events into a transaction and ingests them; "
                     + "other event types are acknowledged and ignored.")
-    public ResponseEntity<?> handle(@RequestBody StripeWebhookEvent event) {
+    public ResponseEntity<?> handle(@RequestBody byte[] payload,
+                                    @RequestHeader(value = "Stripe-Signature", required = false) String signature) {
+        String rawPayload = new String(payload, StandardCharsets.UTF_8);
+        if (!signatureVerifier.isValid(rawPayload, signature)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Stripe-Signature header.");
+        }
+
+        StripeWebhookEvent event;
+        try {
+            event = objectMapper.readValue(payload, StripeWebhookEvent.class);
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Stripe event payload.", ex);
+        }
         if (!isAuthorizationEvent(event)) {
-            log.info("Ignoring non-authorization Stripe event: type={}", event.type());
+            String type = event == null ? "null" : String.valueOf(event.type());
+            log.info("Ignoring non-authorization Stripe event: type={}", type);
             return ResponseEntity.ok(Map.of(
                     "received", true,
                     "processed", false,
-                    "type", String.valueOf(event.type())));
+                    "type", type));
         }
 
         CreateTransactionRequest request = adapter.toCreateRequest(event.data().object());

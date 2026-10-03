@@ -1,6 +1,8 @@
 package com.amex.benefit_activation_engine.service;
 
 import com.amex.benefit_activation_engine.dto.MetricsResponse;
+import com.amex.benefit_activation_engine.dto.BenefitUtilizationResponse;
+import com.amex.benefit_activation_engine.model.BenefitType;
 import com.amex.benefit_activation_engine.model.Claim;
 import com.amex.benefit_activation_engine.model.ClaimStatus;
 import com.amex.benefit_activation_engine.model.Transaction;
@@ -58,6 +60,7 @@ public class MetricsService {
         BigDecimal claimedValue = sum(claims, c -> c.getStatus() != ClaimStatus.PREFILLED);
         BigDecimal paidValue = sum(claims, c -> c.getStatus() == ClaimStatus.PAID);
         BigDecimal unclaimedValue = detectableValue.subtract(claimedValue);
+        Map<BenefitType, BenefitUtilizationResponse> utilizationByBenefit = utilizationByBenefit(claims);
 
         return new MetricsResponse(
                 totalTransactions,
@@ -70,7 +73,8 @@ public class MetricsService {
                 paidValue,
                 unclaimedValue,
                 percentage(claimedValue, detectableValue),
-                currencyOf(claims));
+                currencyOf(claims),
+                utilizationByBenefit);
     }
 
     // ------------------------------------------------------------------
@@ -112,5 +116,29 @@ public class MetricsService {
             return null;
         }
         return currencies.size() == 1 ? currencies.iterator().next() : "MIXED";
+    }
+
+    private Map<BenefitType, BenefitUtilizationResponse> utilizationByBenefit(List<Claim> claims) {
+        Map<BenefitType, BenefitUtilizationResponse> result = new EnumMap<>(BenefitType.class);
+        for (BenefitType type : BenefitType.values()) {
+            List<Claim> benefitClaims = claims.stream()
+                    .filter(claim -> claim.getBenefit() != null && claim.getBenefit().getType() == type)
+                    .toList();
+            long claimedCount = benefitClaims.stream()
+                    .filter(claim -> claim.getStatus() != ClaimStatus.PREFILLED)
+                    .count();
+            long paidCount = benefitClaims.stream()
+                    .filter(claim -> claim.getStatus() == ClaimStatus.PAID)
+                    .count();
+            result.put(type, new BenefitUtilizationResponse(
+                    benefitClaims.size(),
+                    claimedCount,
+                    paidCount,
+                    percentage(claimedCount, benefitClaims.size()),
+                    sum(benefitClaims, claim -> true),
+                    sum(benefitClaims, claim -> claim.getStatus() != ClaimStatus.PREFILLED),
+                    sum(benefitClaims, claim -> claim.getStatus() == ClaimStatus.PAID)));
+        }
+        return result;
     }
 }

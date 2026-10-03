@@ -60,6 +60,11 @@ public class IngestionService {
     }
 
     @Transactional(readOnly = true)
+    public List<Transaction> findByStatus(TransactionStatus status) {
+        return transactionRepository.findByStatus(status);
+    }
+
+    @Transactional(readOnly = true)
     public Transaction getById(Long id) {
         return transactionRepository.findById(id)
                 .orElseThrow(() -> new TransactionNotFoundException(id));

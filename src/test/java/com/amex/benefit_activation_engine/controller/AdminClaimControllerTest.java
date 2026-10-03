@@ -11,7 +11,9 @@ import com.amex.benefit_activation_engine.repository.TransactionRepository;
 import com.amex.benefit_activation_engine.security.JwtService;
 import com.amex.benefit_activation_engine.security.Roles;
 import com.amex.benefit_activation_engine.service.ClaimService;
+import com.amex.benefit_activation_engine.service.ClaimDocumentService;
 import com.amex.benefit_activation_engine.service.ClaimWorkflowService;
+import com.amex.benefit_activation_engine.support.ClaimDocumentTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,6 +49,8 @@ class AdminClaimControllerTest {
     @Autowired
     private ClaimWorkflowService workflowService;
     @Autowired
+    private ClaimDocumentService claimDocumentService;
+    @Autowired
     private BenefitRepository benefitRepository;
     @Autowired
     private TransactionRepository transactionRepository;
@@ -73,6 +77,11 @@ class AdminClaimControllerTest {
 
     private String memberToken(String id) {
         return "Bearer " + jwtService.issueToken(id);
+    }
+
+    private void submitWithDocuments(Claim claim) {
+        ClaimDocumentTestSupport.uploadRequiredDocuments(claimDocumentService, claim);
+        workflowService.submit(claim.getId());
     }
 
     @Test
@@ -118,10 +127,10 @@ class AdminClaimControllerTest {
     void adminClaims_filtersByStatus_reviewQueue() throws Exception {
         // 900 > auto-approve threshold (700) -> routed to UNDER_REVIEW on submit.
         Claim big = prefillClaimFor("CM-1001", "PLATINUM", "900.00");
-        workflowService.submit(big.getId());
+        submitWithDocuments(big);
         // 100 <= threshold -> auto-approved & PAID, so not in the review queue.
         Claim small = prefillClaimFor("CM-1002", "GOLD", "100.00");
-        workflowService.submit(small.getId());
+        submitWithDocuments(small);
 
         mockMvc.perform(get("/api/admin/claims").param("status", "UNDER_REVIEW")
                         .header("Authorization", reviewerToken()))
@@ -137,10 +146,10 @@ class AdminClaimControllerTest {
         prefillClaimFor("CM-1001", "PLATINUM", "250.00");
         // Submitted & auto-processed (<=700) -> PAID.
         Claim small = prefillClaimFor("CM-1002", "GOLD", "120.00");
-        workflowService.submit(small.getId());
+        submitWithDocuments(small);
         // Submitted & routed to review (>700) -> UNDER_REVIEW.
         Claim big = prefillClaimFor("CM-1003", "PLATINUM", "950.00");
-        workflowService.submit(big.getId());
+        submitWithDocuments(big);
 
         mockMvc.perform(get("/api/admin/claims").param("status", "SUBMITTED")
                         .header("Authorization", reviewerToken()))
@@ -152,7 +161,7 @@ class AdminClaimControllerTest {
     @Test
     void adminClaims_filterApproved_showsReviewerApprovedEvenAfterProcessed() throws Exception {
         Claim big = prefillClaimFor("CM-1001", "PLATINUM", "900.00");
-        workflowService.submit(big.getId());                                        // -> UNDER_REVIEW
+        submitWithDocuments(big);                                                   // -> UNDER_REVIEW
         workflowService.decide(big.getId(), ClaimDecision.APPROVE, "receipt ok");   // APPROVED -> PAID
 
         // Shows under "Approved" (resolved from the reviewer's audit event) ...
@@ -171,7 +180,7 @@ class AdminClaimControllerTest {
     @Test
     void adminClaims_filterApproved_excludesAutoProcessed() throws Exception {
         Claim small = prefillClaimFor("CM-1002", "GOLD", "100.00");
-        workflowService.submit(small.getId()); // auto-approved by SYSTEM -> PAID
+        submitWithDocuments(small); // auto-approved by SYSTEM -> PAID
 
         // Auto-processed claims were never reviewer-approved.
         mockMvc.perform(get("/api/admin/claims").param("status", "APPROVED")
@@ -189,7 +198,7 @@ class AdminClaimControllerTest {
     @Test
     void decision_approve_movesClaimForward() throws Exception {
         Claim big = prefillClaimFor("CM-1001", "PLATINUM", "900.00");
-        workflowService.submit(big.getId()); // -> UNDER_REVIEW
+        submitWithDocuments(big); // -> UNDER_REVIEW
 
         String body = "{\"decision\":\"APPROVE\",\"reason\":\"Verified receipt\"}";
         mockMvc.perform(post("/api/admin/claims/{id}/decision", big.getId())
@@ -205,7 +214,7 @@ class AdminClaimControllerTest {
     @Test
     void decision_reject_marksRejected() throws Exception {
         Claim big = prefillClaimFor("CM-1001", "PLATINUM", "900.00");
-        workflowService.submit(big.getId()); // -> UNDER_REVIEW
+        submitWithDocuments(big); // -> UNDER_REVIEW
 
         String body = "{\"decision\":\"REJECT\",\"reason\":\"Outside coverage window\"}";
         mockMvc.perform(post("/api/admin/claims/{id}/decision", big.getId())

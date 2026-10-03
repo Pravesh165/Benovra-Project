@@ -9,6 +9,8 @@ import com.amex.benefit_activation_engine.repository.BenefitRepository;
 import com.amex.benefit_activation_engine.repository.TransactionRepository;
 import com.amex.benefit_activation_engine.security.JwtService;
 import com.amex.benefit_activation_engine.service.ClaimService;
+import com.amex.benefit_activation_engine.service.ClaimDocumentService;
+import com.amex.benefit_activation_engine.support.ClaimDocumentTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -46,6 +48,8 @@ class MeClaimControllerTest {
     private JwtService jwtService;
     @Autowired
     private ClaimService claimService;
+    @Autowired
+    private ClaimDocumentService claimDocumentService;
     @Autowired
     private BenefitRepository benefitRepository;
     @Autowired
@@ -124,6 +128,7 @@ class MeClaimControllerTest {
     @Test
     void submit_ownClaim_succeeds() throws Exception {
         Claim claim = prefillClaimFor(ALICE, "MacBook Pro 14", "499.99");
+        ClaimDocumentTestSupport.uploadRequiredDocuments(claimDocumentService, claim);
 
         mockMvc.perform(post("/api/me/claims/{id}/submit", claim.getId())
                         .header("Authorization", bearerFor(ALICE)))

@@ -10,6 +10,7 @@ import com.amex.benefit_activation_engine.model.Transaction;
 import com.amex.benefit_activation_engine.model.TransactionStatus;
 import com.amex.benefit_activation_engine.repository.BenefitRepository;
 import com.amex.benefit_activation_engine.repository.TransactionRepository;
+import com.amex.benefit_activation_engine.support.ClaimDocumentTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,6 +40,8 @@ class ClaimWorkflowServiceTest {
     private BenefitRepository benefitRepository;
     @Autowired
     private TransactionRepository transactionRepository;
+    @Autowired
+    private ClaimDocumentService claimDocumentService;
 
     private Benefit benefit(BenefitType type) {
         return benefitRepository.findByType(type).orElseThrow();
@@ -66,12 +69,17 @@ class ClaimWorkflowServiceTest {
                 .toList();
     }
 
+    private Claim submitWithDocuments(Claim claim) {
+        ClaimDocumentTestSupport.uploadRequiredDocuments(claimDocumentService, claim);
+        return workflowService.submit(claim.getId());
+    }
+
     @Test
     void submit_smallClaim_isAutoApprovedAndPaid() {
         // 400 <= 700 threshold -> auto-approve -> disburse -> PAID.
         Claim claim = prefilled("PLATINUM", "ELECTRONICS", "400.00", BenefitType.PURCHASE_PROTECTION);
 
-        Claim result = workflowService.submit(claim.getId());
+        Claim result = submitWithDocuments(claim);
 
         assertThat(result.getStatus()).isEqualTo(ClaimStatus.PAID);
         assertThat(result.getSubmittedAt()).isNotNull();
@@ -86,7 +94,7 @@ class ClaimWorkflowServiceTest {
         // 800 > 700 threshold -> UNDER_REVIEW, no payout yet.
         Claim claim = prefilled("PLATINUM", "ELECTRONICS", "800.00", BenefitType.PURCHASE_PROTECTION);
 
-        Claim result = workflowService.submit(claim.getId());
+        Claim result = submitWithDocuments(claim);
 
         assertThat(result.getStatus()).isEqualTo(ClaimStatus.UNDER_REVIEW);
         assertThat(result.getSubmittedAt()).isNotNull();
@@ -98,7 +106,7 @@ class ClaimWorkflowServiceTest {
     @Test
     void reviewerApprove_movesToPaid() {
         Claim claim = prefilled("PLATINUM", "ELECTRONICS", "800.00", BenefitType.PURCHASE_PROTECTION);
-        workflowService.submit(claim.getId()); // -> UNDER_REVIEW
+        submitWithDocuments(claim); // -> UNDER_REVIEW
 
         Claim result = workflowService.decide(claim.getId(), ClaimDecision.APPROVE, "Docs verified");
 
@@ -112,7 +120,7 @@ class ClaimWorkflowServiceTest {
     @Test
     void reviewerReject_movesToRejected_withReason_andNoPayout() {
         Claim claim = prefilled("PLATINUM", "ELECTRONICS", "800.00", BenefitType.PURCHASE_PROTECTION);
-        workflowService.submit(claim.getId()); // -> UNDER_REVIEW
+        submitWithDocuments(claim); // -> UNDER_REVIEW
 
         Claim result = workflowService.decide(claim.getId(), ClaimDecision.REJECT, "Insufficient evidence");
 
@@ -135,10 +143,14 @@ class ClaimWorkflowServiceTest {
     @Test
     void resubmitting_aPaidClaim_isIllegalTransition() {
         Claim claim = prefilled("PLATINUM", "ELECTRONICS", "400.00", BenefitType.PURCHASE_PROTECTION);
-        workflowService.submit(claim.getId()); // -> PAID (auto)
+        submitWithDocuments(claim); // -> PAID (auto)
+        String payoutReference = claim.getPayoutReference();
 
         assertThatThrownBy(() -> workflowService.submit(claim.getId()))
                 .isInstanceOf(IllegalClaimTransitionException.class);
+        assertThat(claim.getStatus()).isEqualTo(ClaimStatus.PAID);
+        assertThat(claim.getPayoutReference()).isEqualTo(payoutReference);
+        assertThat(auditToStates(claim.getId()).stream().filter(status -> status == ClaimStatus.PAID)).hasSize(1);
     }
 
     @Test
@@ -149,6 +161,21 @@ class ClaimWorkflowServiceTest {
 
         assertThatThrownBy(() -> workflowService.submit(claim.getId()))
                 .isInstanceOf(ClaimNotEntitledException.class);
+    }
+
+    @Test
+    void submit_expiredPurchaseProtectionClaim_isRejectedWithoutTransition() {
+        Claim claim = prefilled("PLATINUM", "ELECTRONICS", "200.00", BenefitType.PURCHASE_PROTECTION);
+        LocalDate expiredPurchaseDate = LocalDate.now().minusDays(91);
+        claim.getTransaction().setPurchaseDate(expiredPurchaseDate);
+        transactionRepository.save(claim.getTransaction());
+        ClaimDocumentTestSupport.uploadRequiredDocuments(claimDocumentService, claim);
+
+        assertThatThrownBy(() -> workflowService.submit(claim.getId()))
+                .isInstanceOf(ClaimCoverageExpiredException.class)
+                .hasMessageContaining(expiredPurchaseDate.plusDays(90).toString());
+        assertThat(claim.getStatus()).isEqualTo(ClaimStatus.PREFILLED);
+        assertThat(auditToStates(claim.getId())).isEmpty();
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.amex.benefit_activation_engine.model.TransactionStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -32,6 +33,8 @@ class DataModelPersistenceTest {
     private TransactionRepository transactionRepository;
     @Autowired
     private ClaimRepository claimRepository;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private Benefit newPurchaseProtection() {
         return Benefit.builder()
@@ -115,5 +118,27 @@ class DataModelPersistenceTest {
         assertThat(reloaded.getTransaction().getMerchantName()).isEqualTo("Best Electronics");
         assertThat(reloaded.getBenefit().getType()).isEqualTo(BenefitType.PURCHASE_PROTECTION);
         assertThat(claimRepository.findByTransactionId(transaction.getId())).hasSize(1);
+    }
+
+    @Test
+    void flywayMigrationCreatesRequiredIndexes() {
+        Integer appliedBaseline = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM \"flyway_schema_history\" WHERE \"version\" = '1' AND \"success\" = TRUE",
+                Integer.class);
+        Integer requiredIndexes = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.indexes
+                WHERE index_name IN (
+                    'IDX_TRANSACTION_MEMBER_CREATED',
+                    'IDX_TRANSACTION_STATUS_CREATED',
+                    'IDX_ENTITLEMENT_PRODUCT_ACTIVE',
+                    'IDX_CLAIM_STATUS_CREATED',
+                    'IDX_CLAIM_AUDIT_CLAIM_TIME',
+                    'IDX_CLAIM_AUDIT_ACTOR_STATUS',
+                    'IDX_CLAIM_DOCUMENT_CLAIM_TIME'
+                )
+                """, Integer.class);
+
+        assertThat(appliedBaseline).isEqualTo(1);
+        assertThat(requiredIndexes).isEqualTo(7);
     }
 }

@@ -3,6 +3,7 @@ import { fetchMyClaims, submitClaim, SessionExpiredError } from './api.js'
 import { statusLabel } from './format.js'
 import ClaimCard from './ClaimCard.jsx'
 import ClaimReviewWizard from './ClaimReviewWizard.jsx'
+import { handleTabListKeydown } from './keyboard.js'
 
 const TABS = { TODO: 'todo', SUBMITTED: 'submitted' }
 
@@ -53,6 +54,24 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
   }
 
   const activeList = tab === TABS.TODO ? toClaim : submitted
+  const expiringClaims = toClaim.filter((claim) =>
+    claim.coverageDaysRemaining != null
+      && claim.coverageDaysRemaining >= 0
+      && claim.coverageDaysRemaining <= 7)
+  const activePanel = loading ? <p className="muted">Loading your claims…</p> : activeList.length === 0 ? (
+    <EmptyState tab={tab} />
+  ) : (
+    <div className="claim-list">
+      {activeList.map((claim) => (
+        <ClaimCard
+          key={claim.id}
+          claim={claim}
+          showSubmit={tab === TABS.TODO}
+          onSubmit={() => handleOpenReview(claim)}
+        />
+      ))}
+    </div>
+  )
 
   return (
     <div className="app">
@@ -72,17 +91,27 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
 
         <nav className="tabs" role="tablist">
           <button
+            id="member-tab-todo"
             role="tab"
+            aria-selected={tab === TABS.TODO}
+            aria-controls="member-panel-todo"
+            tabIndex={tab === TABS.TODO ? 0 : -1}
             className={tab === TABS.TODO ? 'tab tab-active' : 'tab'}
             onClick={() => setTab(TABS.TODO)}
+            onKeyDown={(event) => handleTabListKeydown(event, ['member-tab-todo', 'member-tab-submitted'], tab === TABS.TODO ? 0 : 1, (index) => setTab(index === 0 ? TABS.TODO : TABS.SUBMITTED))}
           >
             Claims to make
             {toClaim.length > 0 && <span className="tab-count">{toClaim.length}</span>}
           </button>
           <button
+            id="member-tab-submitted"
             role="tab"
+            aria-selected={tab === TABS.SUBMITTED}
+            aria-controls="member-panel-submitted"
+            tabIndex={tab === TABS.SUBMITTED ? 0 : -1}
             className={tab === TABS.SUBMITTED ? 'tab tab-active' : 'tab'}
             onClick={() => setTab(TABS.SUBMITTED)}
+            onKeyDown={(event) => handleTabListKeydown(event, ['member-tab-todo', 'member-tab-submitted'], tab === TABS.TODO ? 0 : 1, (index) => setTab(index === 0 ? TABS.TODO : TABS.SUBMITTED))}
           >
             Submitted claims
             {submitted.length > 0 && <span className="tab-count">{submitted.length}</span>}
@@ -91,23 +120,14 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
 
         {notice && <div className="banner banner-success">{notice}</div>}
         {error && <div className="banner banner-error">{error}</div>}
-
-        {loading ? (
-          <p className="muted">Loading your claims…</p>
-        ) : activeList.length === 0 ? (
-          <EmptyState tab={tab} />
-        ) : (
-          <div className="claim-list">
-            {activeList.map((claim) => (
-              <ClaimCard
-                key={claim.id}
-                claim={claim}
-                showSubmit={tab === TABS.TODO}
-                onSubmit={() => handleOpenReview(claim)}
-              />
-            ))}
+        {tab === TABS.TODO && expiringClaims.length > 0 && (
+          <div className="banner banner-warning" role="status">
+            {expiringClaims.length} claim{expiringClaims.length === 1 ? '' : 's'} expire within 7 days.
           </div>
         )}
+
+        <section id="member-panel-todo" role="tabpanel" aria-labelledby="member-tab-todo" tabIndex={0} hidden={tab !== TABS.TODO}>{tab === TABS.TODO && activePanel}</section>
+        <section id="member-panel-submitted" role="tabpanel" aria-labelledby="member-tab-submitted" tabIndex={0} hidden={tab !== TABS.SUBMITTED}>{tab === TABS.SUBMITTED && activePanel}</section>
       </main>
 
       {selectedClaimForReview && (

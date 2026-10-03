@@ -8,6 +8,8 @@ import com.amex.benefit_activation_engine.model.Transaction;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Reviewer-facing view of a claim. Unlike the customer {@link ClaimResponse},
@@ -27,6 +29,8 @@ public record ReviewerClaimResponse(
         BigDecimal purchaseAmount,
         BigDecimal claimAmount,
         String currency,
+        LocalDate coverageExpiresOn,
+        Long coverageDaysRemaining,
         String decisionReason,
         String payoutReference,
         Instant createdAt,
@@ -50,10 +54,25 @@ public record ReviewerClaimResponse(
                 txn == null ? null : txn.getAmount(),
                 claim.getClaimAmount(),
                 txn == null ? null : txn.getCurrency(),
+                coverageExpiresOn(benefit, txn),
+                coverageDaysRemaining(benefit, txn),
                 claim.getDecisionReason(),
                 claim.getPayoutReference(),
                 claim.getCreatedAt(),
                 claim.getSubmittedAt(),
                 claim.getDecidedAt());
+    }
+
+    private static LocalDate coverageExpiresOn(Benefit benefit, Transaction transaction) {
+        if (benefit == null || transaction == null || transaction.getPurchaseDate() == null
+                || benefit.getType() == BenefitType.TRAVEL_DELAY || benefit.getCoverageWindowDays() == null) {
+            return null;
+        }
+        return transaction.getPurchaseDate().plusDays(benefit.getCoverageWindowDays());
+    }
+
+    private static Long coverageDaysRemaining(Benefit benefit, Transaction transaction) {
+        LocalDate expiresOn = coverageExpiresOn(benefit, transaction);
+        return expiresOn == null ? null : ChronoUnit.DAYS.between(LocalDate.now(), expiresOn);
     }
 }

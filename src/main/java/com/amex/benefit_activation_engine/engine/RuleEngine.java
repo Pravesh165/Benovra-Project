@@ -21,4 +21,8 @@ public interface RuleEngine {
      * @return entitled, ranked matching benefits; empty when nothing qualifies
      */
     List<Benefit> match(Transaction transaction);
+
+    default String explainNoMatch(Transaction transaction) {
+        return "No eligible benefit matched this transaction.";
+    }
 }

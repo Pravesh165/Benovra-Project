@@ -30,6 +30,7 @@ public class TransactionResponse {
     private LocalDate purchaseDate;
     private String description;
     private TransactionStatus status;
+    private String matchReason;
     private Instant createdAt;
 
     public static TransactionResponse from(Transaction t) {
@@ -44,6 +45,7 @@ public class TransactionResponse {
                 .purchaseDate(t.getPurchaseDate())
                 .description(t.getDescription())
                 .status(t.getStatus())
+                .matchReason(t.getMatchReason())
                 .createdAt(t.getCreatedAt())
                 .build();
     }

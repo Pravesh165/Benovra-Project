@@ -1,6 +1,7 @@
 package com.amex.benefit_activation_engine.controller;
 
 import com.amex.benefit_activation_engine.service.ClaimNotEntitledException;
+import com.amex.benefit_activation_engine.service.ClaimCoverageExpiredException;
 import com.amex.benefit_activation_engine.service.ClaimAccessDeniedException;
 import com.amex.benefit_activation_engine.service.ClaimNotFoundException;
 import com.amex.benefit_activation_engine.service.IllegalClaimTransitionException;
@@ -14,6 +15,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -80,6 +82,13 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(ClaimCoverageExpiredException.class)
+    public ProblemDetail handleCoverageExpired(ClaimCoverageExpiredException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Claim coverage expired");
+        return problem;
+    }
+
     @ExceptionHandler(ClaimAccessDeniedException.class)
     public ProblemDetail handleClaimAccessDenied(ClaimAccessDeniedException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
@@ -99,6 +108,14 @@ public class GlobalExceptionHandler {
             errors.put(String.valueOf(violation.getPropertyPath()), violation.getMessage());
         }
         problem.setProperty("errors", errors);
+        return problem;
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ProblemDetail handleResponseStatus(ResponseStatusException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                ex.getStatusCode(), ex.getReason() == null ? "Request failed" : ex.getReason());
+        problem.setTitle("Request failed");
         return problem;
     }
 }

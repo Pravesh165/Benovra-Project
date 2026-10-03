@@ -10,6 +10,8 @@ import com.amex.benefit_activation_engine.repository.TransactionRepository;
 import com.amex.benefit_activation_engine.security.JwtService;
 import com.amex.benefit_activation_engine.security.Roles;
 import com.amex.benefit_activation_engine.service.ClaimService;
+import com.amex.benefit_activation_engine.service.ClaimDocumentService;
+import com.amex.benefit_activation_engine.support.ClaimDocumentTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -53,6 +55,8 @@ class ClaimWorkflowControllerTest {
     @Autowired
     private ClaimService claimService;
     @Autowired
+    private ClaimDocumentService claimDocumentService;
+    @Autowired
     private BenefitRepository benefitRepository;
     @Autowired
     private TransactionRepository transactionRepository;
@@ -86,11 +90,16 @@ class ClaimWorkflowControllerTest {
         return claimService.generateFor(txn, benefit);
     }
 
+    private void uploadRequiredDocuments(Claim claim) {
+        ClaimDocumentTestSupport.uploadRequiredDocuments(claimDocumentService, claim);
+    }
+
     // ── tests ────────────────────────────────────────────────────────────────────
 
     @Test
     void submitSmallClaim_autoApprovedAndPaid() throws Exception {
         Claim claim = prefilled("400.00");
+        uploadRequiredDocuments(claim);
 
         mockMvc.perform(post("/api/claims/{id}/submit", claim.getId())
                         .header("Authorization", ownerToken()))
@@ -99,9 +108,32 @@ class ClaimWorkflowControllerTest {
                 .andExpect(jsonPath("$.payoutReference").exists());
     }
 
+            @Test
+            void duplicateSubmission_returnsConflictAndDoesNotAppendAuditEvents() throws Exception {
+            Claim claim = prefilled("400.00");
+            uploadRequiredDocuments(claim);
+
+            mockMvc.perform(post("/api/claims/{id}/submit", claim.getId())
+                    .header("Authorization", ownerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PAID"));
+
+            mockMvc.perform(post("/api/claims/{id}/submit", claim.getId())
+                    .header("Authorization", ownerToken()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Illegal claim transition"));
+
+            mockMvc.perform(get("/api/claims/{id}/audit", claim.getId())
+                    .header("Authorization", reviewerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[2].toStatus").value("PAID"));
+            }
+
     @Test
     void submitLargeClaim_thenReviewerApproves() throws Exception {
         Claim claim = prefilled("800.00");
+        uploadRequiredDocuments(claim);
 
         mockMvc.perform(post("/api/claims/{id}/submit", claim.getId())
                         .header("Authorization", ownerToken()))
@@ -119,6 +151,7 @@ class ClaimWorkflowControllerTest {
     @Test
     void auditTrail_isReturnedForSubmittedClaim() throws Exception {
         Claim claim = prefilled("400.00");
+        uploadRequiredDocuments(claim);
         mockMvc.perform(post("/api/claims/{id}/submit", claim.getId())
                         .header("Authorization", ownerToken()))
                 .andExpect(status().isOk());
@@ -150,6 +183,19 @@ class ClaimWorkflowControllerTest {
         mockMvc.perform(post("/api/claims/{id}/submit", 999999L)
                         .header("Authorization", ownerToken()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void submittingExpiredPurchaseClaim_returnsConflict() throws Exception {
+        Claim claim = prefilled("400.00");
+        claim.getTransaction().setPurchaseDate(LocalDate.now().minusDays(91));
+        transactionRepository.save(claim.getTransaction());
+
+        mockMvc.perform(post("/api/claims/{id}/submit", claim.getId())
+                        .header("Authorization", ownerToken()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Claim coverage expired"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("expired")));
     }
 
     @Test

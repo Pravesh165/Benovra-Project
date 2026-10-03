@@ -1,6 +1,7 @@
 package com.amex.benefit_activation_engine.dto;
 
 import com.amex.benefit_activation_engine.model.ClaimStatus;
+import com.amex.benefit_activation_engine.model.BenefitType;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -34,6 +35,7 @@ public record MetricsResponse(
         BigDecimal paidValue,
         BigDecimal unclaimedValue,
         double unclaimedReductionPct,
-        String currency
+        String currency,
+        Map<BenefitType, BenefitUtilizationResponse> utilizationByBenefit
 ) {
 }

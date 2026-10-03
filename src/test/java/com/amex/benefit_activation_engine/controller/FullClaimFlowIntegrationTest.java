@@ -2,12 +2,16 @@ package com.amex.benefit_activation_engine.controller;
 
 import com.amex.benefit_activation_engine.dto.CreateTransactionRequest;
 import com.amex.benefit_activation_engine.model.Claim;
+import com.amex.benefit_activation_engine.model.ClaimDocumentType;
 import com.amex.benefit_activation_engine.model.ClaimStatus;
 import com.amex.benefit_activation_engine.model.Transaction;
 import com.amex.benefit_activation_engine.repository.ClaimAuditRepository;
+import com.amex.benefit_activation_engine.repository.ClaimDocumentRepository;
 import com.amex.benefit_activation_engine.repository.ClaimRepository;
 import com.amex.benefit_activation_engine.repository.TransactionRepository;
 import com.amex.benefit_activation_engine.service.ClaimWorkflowService;
+import com.amex.benefit_activation_engine.service.ClaimDocumentService;
+import com.amex.benefit_activation_engine.support.ClaimDocumentTestSupport;
 import com.amex.benefit_activation_engine.service.IngestionService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -36,15 +40,20 @@ class FullClaimFlowIntegrationTest {
     @Autowired
     private ClaimWorkflowService workflowService;
     @Autowired
+    private ClaimDocumentService claimDocumentService;
+    @Autowired
     private TransactionRepository transactionRepository;
     @Autowired
     private ClaimRepository claimRepository;
     @Autowired
     private ClaimAuditRepository auditRepository;
+    @Autowired
+    private ClaimDocumentRepository claimDocumentRepository;
 
     @AfterEach
     void cleanUp() {
         auditRepository.deleteAll();
+        claimDocumentRepository.deleteAll();
         claimRepository.deleteAll();
         transactionRepository.deleteAll();
     }
@@ -69,6 +78,8 @@ class FullClaimFlowIntegrationTest {
         assertThat(prefilled.getStatus()).isEqualTo(ClaimStatus.PREFILLED);
 
         // WORKFLOW: submit -> auto-approve -> pay.
+        ClaimDocumentTestSupport.uploadDocuments(claimDocumentService, prefilled, "CM-1001",
+            ClaimDocumentType.PURCHASE_RECEIPT, ClaimDocumentType.PROOF_OF_LOSS);
         Claim paid = workflowService.submit(prefilled.getId());
 
         assertThat(paid.getStatus()).isEqualTo(ClaimStatus.PAID);

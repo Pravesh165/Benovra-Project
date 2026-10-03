@@ -7,8 +7,12 @@ import com.amex.benefit_activation_engine.model.Transaction;
 import com.amex.benefit_activation_engine.model.TransactionStatus;
 import com.amex.benefit_activation_engine.repository.BenefitRepository;
 import com.amex.benefit_activation_engine.repository.TransactionRepository;
+import com.amex.benefit_activation_engine.security.JwtService;
+import com.amex.benefit_activation_engine.security.Roles;
 import com.amex.benefit_activation_engine.service.ClaimService;
 import com.amex.benefit_activation_engine.service.ClaimWorkflowService;
+import com.amex.benefit_activation_engine.service.ClaimDocumentService;
+import com.amex.benefit_activation_engine.support.ClaimDocumentTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,9 +39,13 @@ class MetricsControllerTest {
     @Autowired
     private MockMvc mockMvc;
     @Autowired
+    private JwtService jwtService;
+    @Autowired
     private ClaimService claimService;
     @Autowired
     private ClaimWorkflowService workflowService;
+    @Autowired
+    private ClaimDocumentService claimDocumentService;
     @Autowired
     private BenefitRepository benefitRepository;
     @Autowired
@@ -58,9 +66,11 @@ class MetricsControllerTest {
                 .build());
         Benefit benefit = benefitRepository.findByType(BenefitType.PURCHASE_PROTECTION).orElseThrow();
         Claim claim = claimService.generateFor(txn, benefit);
+        ClaimDocumentTestSupport.uploadRequiredDocuments(claimDocumentService, claim);
         workflowService.submit(claim.getId()); // 400 <= 700 -> PAID
 
-        mockMvc.perform(get("/api/metrics"))
+        mockMvc.perform(get("/api/metrics")
+                .header("Authorization", "Bearer " + jwtService.issueToken("admin", Roles.REVIEWER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalTransactions").value(1))
                 .andExpect(jsonPath("$.matchedTransactions").value(1))

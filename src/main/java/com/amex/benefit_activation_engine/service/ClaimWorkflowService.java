@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -50,6 +51,8 @@ public class ClaimWorkflowService {
     private final EntitlementRepository entitlementRepository;
     private final BankClient bankClient;
     private final WorkflowProperties workflowProperties;
+    private final ClaimDocumentService claimDocumentService;
+    private final CoverageWindowPolicy coverageWindowPolicy;
 
     /**
      * Submits a PREFILLED claim (→ SUBMITTED), then applies the auto-decision
@@ -58,8 +61,10 @@ public class ClaimWorkflowService {
      */
     @Transactional
     public Claim submit(Long claimId) {
-        Claim claim = load(claimId);
+        Claim claim = loadForUpdate(claimId);
         assertEntitled(claim);
+        assertCoverageWindowActive(claim);
+        claimDocumentService.assertRequiredDocumentsPresent(claim);
 
         transition(claim, ClaimStatus.SUBMITTED, ACTOR_SYSTEM, "Claim submitted by card member");
 
@@ -83,7 +88,7 @@ public class ClaimWorkflowService {
      */
     @Transactional
     public Claim decide(Long claimId, ClaimDecision decision, String reason) {
-        Claim claim = load(claimId);
+        Claim claim = loadForUpdate(claimId);
         String note = StringUtils.hasText(reason) ? reason.trim() : "(no reason provided)";
         claim.setDecisionReason(note);
 
@@ -112,6 +117,11 @@ public class ClaimWorkflowService {
                 .orElseThrow(() -> new ClaimNotFoundException(claimId));
     }
 
+    private Claim loadForUpdate(Long claimId) {
+        return claimRepository.findByIdForUpdate(claimId)
+                .orElseThrow(() -> new ClaimNotFoundException(claimId));
+    }
+
     /**
      * Verifies the claim's card product still holds an active entitlement for
      * the claimed benefit — the functional link between claims and entitlements.
@@ -123,6 +133,15 @@ public class ClaimWorkflowService {
                 .anyMatch(e -> e.getBenefit() != null && benefitId.equals(e.getBenefit().getId()));
         if (!entitled) {
             throw new ClaimNotEntitledException(claim.getId(), cardProduct, claim.getBenefit().getType().name());
+        }
+    }
+
+    private void assertCoverageWindowActive(Claim claim) {
+        LocalDate purchaseDate = claim.getTransaction().getPurchaseDate();
+        LocalDate today = LocalDate.now();
+        if (!coverageWindowPolicy.isWithinWindow(claim.getBenefit(), purchaseDate, today)) {
+            throw new ClaimCoverageExpiredException(
+                    claim.getId(), coverageWindowPolicy.expiresOn(claim.getBenefit(), purchaseDate));
         }
     }
 

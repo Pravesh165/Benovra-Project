@@ -8,6 +8,8 @@ import com.amex.benefit_activation_engine.model.TransactionStatus;
 import com.amex.benefit_activation_engine.repository.BenefitRepository;
 import com.amex.benefit_activation_engine.repository.TransactionRepository;
 import com.amex.benefit_activation_engine.service.ClaimService;
+import com.amex.benefit_activation_engine.service.ClaimDocumentService;
+import com.amex.benefit_activation_engine.support.ClaimDocumentTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -46,6 +48,8 @@ class SecurityAccessControlIntegrationTest {
     private JwtService jwtService;
     @Autowired
     private ClaimService claimService;
+    @Autowired
+    private ClaimDocumentService claimDocumentService;
     @Autowired
     private BenefitRepository benefitRepository;
     @Autowired
@@ -110,11 +114,26 @@ class SecurityAccessControlIntegrationTest {
     }
 
     @Test
-    void claimById_memberToken_returns200OrNotFound() throws Exception {
+    void claimById_ownerMemberToken_returns200() throws Exception {
         Claim claim = createClaimForMember("CM-5001");
         mockMvc.perform(get("/api/claims/{id}", claim.getId())
                         .header("Authorization", memberToken("CM-5001")))
-                // Any authenticated user may read a single claim.
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void claimById_wrongMemberToken_returns403() throws Exception {
+        Claim claim = createClaimForMember("CM-5001");
+        mockMvc.perform(get("/api/claims/{id}", claim.getId())
+                        .header("Authorization", memberToken("CM-9999")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void claimById_reviewerToken_returns200() throws Exception {
+        Claim claim = createClaimForMember("CM-5001");
+        mockMvc.perform(get("/api/claims/{id}", claim.getId())
+                        .header("Authorization", reviewerToken()))
                 .andExpect(status().isOk());
     }
 
@@ -139,6 +158,7 @@ class SecurityAccessControlIntegrationTest {
     @Test
     void submit_correctOwner_returns200() throws Exception {
         Claim claim = createClaimForMember("CM-5004");
+        ClaimDocumentTestSupport.uploadRequiredDocuments(claimDocumentService, claim);
         mockMvc.perform(post("/api/claims/{id}/submit", claim.getId())
                         .header("Authorization", memberToken("CM-5004")))
                 .andExpect(status().isOk());
@@ -242,7 +262,8 @@ class SecurityAccessControlIntegrationTest {
 
     @Test
     void benefits_noToken_returns200() throws Exception {
-        mockMvc.perform(get("/api/benefits"))
+        Claim claim = createClaimForMember("CM-PUBLIC-BENEFITS");
+        mockMvc.perform(get("/api/benefits/{transactionId}", claim.getTransaction().getId()))
                 .andExpect(status().isOk());
     }
 

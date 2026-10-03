@@ -9,6 +9,7 @@ import com.amex.benefit_activation_engine.model.Transaction;
 import com.amex.benefit_activation_engine.model.TransactionStatus;
 import com.amex.benefit_activation_engine.repository.BenefitRepository;
 import com.amex.benefit_activation_engine.repository.TransactionRepository;
+import com.amex.benefit_activation_engine.support.ClaimDocumentTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -38,6 +39,8 @@ class MetricsServiceTest {
     private BenefitRepository benefitRepository;
     @Autowired
     private TransactionRepository transactionRepository;
+    @Autowired
+    private ClaimDocumentService claimDocumentService;
 
     private Claim prefilled(String amount) {
         Transaction txn = transactionRepository.save(Transaction.builder()
@@ -64,6 +67,8 @@ class MetricsServiceTest {
         Claim b = prefilled("800.00");
         prefilled("200.00");
 
+        ClaimDocumentTestSupport.uploadRequiredDocuments(claimDocumentService, a);
+        ClaimDocumentTestSupport.uploadRequiredDocuments(claimDocumentService, b);
         workflowService.submit(a.getId());
         workflowService.submit(b.getId());
 
@@ -85,6 +90,9 @@ class MetricsServiceTest {
         assertThat(m.unclaimedValue()).isEqualByComparingTo("200.00");        // 1400-1200
         assertThat(m.unclaimedReductionPct()).isEqualTo(85.71);               // 1200/1400
         assertThat(m.currency()).isEqualTo("USD");
+        assertThat(m.utilizationByBenefit().get(BenefitType.PURCHASE_PROTECTION).eligibleClaims()).isEqualTo(3);
+        assertThat(m.utilizationByBenefit().get(BenefitType.PURCHASE_PROTECTION).claimedClaims()).isEqualTo(2);
+        assertThat(m.utilizationByBenefit().get(BenefitType.PURCHASE_PROTECTION).utilizationPct()).isEqualTo(66.67);
     }
 
     @Test

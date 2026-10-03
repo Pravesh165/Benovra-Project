@@ -105,6 +105,20 @@ class TransactionIngestionIntegrationTest {
     }
 
     @Test
+    void list_filtersByProcessingStatus() throws Exception {
+        mockMvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BODY))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/transactions").param("status", "VALIDATED")
+                        .header("Authorization", reviewerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].status").value("VALIDATED"));
+    }
+
+    @Test
     void getById_unknownId_returns404() throws Exception {
         mockMvc.perform(get("/api/transactions/{id}", 999999L)
                         .header("Authorization", reviewerToken()))

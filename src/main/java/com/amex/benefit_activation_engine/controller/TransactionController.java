@@ -2,6 +2,7 @@ package com.amex.benefit_activation_engine.controller;
 
 import com.amex.benefit_activation_engine.dto.CreateTransactionRequest;
 import com.amex.benefit_activation_engine.dto.TransactionResponse;
+import com.amex.benefit_activation_engine.model.TransactionStatus;
 import com.amex.benefit_activation_engine.service.IngestionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -41,8 +43,11 @@ public class TransactionController {
 
     @GetMapping
     @Operation(summary = "List transactions")
-    public List<TransactionResponse> list() {
-        return ingestionService.findAll().stream()
+    public List<TransactionResponse> list(@RequestParam(required = false) TransactionStatus status) {
+        List<com.amex.benefit_activation_engine.model.Transaction> transactions = status == null
+                ? ingestionService.findAll()
+                : ingestionService.findByStatus(status);
+        return transactions.stream()
                 .map(TransactionResponse::from)
                 .toList();
     }

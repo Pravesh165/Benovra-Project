@@ -104,6 +104,44 @@ export async function submitClaim(id) {
   return guard(res)
 }
 
+export async function fetchClaimDocuments(claimId) {
+  const res = await fetch(`/api/me/claims/${claimId}/documents`, { headers: authHeaders() })
+  return guard(res)
+}
+
+export async function fetchClaimDocumentChecklist(claimId) {
+  const res = await fetch(`/api/me/claims/${claimId}/documents/checklist`, { headers: authHeaders() })
+  return guard(res)
+}
+
+export async function uploadClaimDocument(claimId, file, documentType) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('documentType', documentType)
+
+  const res = await fetch(`/api/me/claims/${claimId}/documents`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  })
+  return guard(res)
+}
+
+export async function deleteClaimDocument(claimId, documentId) {
+  const res = await fetch(`/api/me/claims/${claimId}/documents/${documentId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  return guard(res)
+}
+
+export async function fetchClaimDocumentContent(claimId, documentId) {
+  const res = await fetch(`/api/me/claims/${claimId}/documents/${documentId}/content`, { headers: authHeaders() })
+  if (res.status === 401 || res.status === 403) throw new SessionExpiredError('Your session has expired. Please sign in again.')
+  if (!res.ok) throw new Error(await readError(res))
+  return res.blob()
+}
+
 // ---- Reviewer (admin) ----
 export async function fetchAdminClaims(filters = {}) {
   const params = new URLSearchParams()
@@ -124,8 +162,36 @@ export async function decideClaim(id, decision, reason) {
   return guard(res)
 }
 
+export async function fetchAdminClaimDocuments(claimId) {
+  const res = await fetch(`/api/admin/claims/${claimId}/documents`, { headers: authHeaders() })
+  return guard(res)
+}
+
+export async function fetchExpiringClaims(withinDays = 7) {
+  const res = await fetch(`/api/admin/claims/expiring?withinDays=${encodeURIComponent(withinDays)}`, { headers: authHeaders() })
+  return guard(res)
+}
+
+export async function fetchClaimAudit(claimId) {
+  const res = await fetch(`/api/claims/${claimId}/audit`, { headers: authHeaders() })
+  return guard(res)
+}
+
+export async function fetchAdminClaimDocumentContent(claimId, documentId) {
+  const res = await fetch(`/api/admin/claims/${claimId}/documents/${documentId}/content`, { headers: authHeaders() })
+  if (res.status === 401 || res.status === 403) throw new SessionExpiredError('Your session has expired. Please sign in again.')
+  if (!res.ok) throw new Error(await readError(res))
+  return res.blob()
+}
+
 export async function fetchMetrics() {
   const res = await fetch('/api/metrics', { headers: authHeaders() })
   if (!res.ok) throw new Error(await readError(res))
   return res.json()
+}
+
+export async function fetchTransactions(status) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  const res = await fetch(`/api/transactions${query}`, { headers: authHeaders() })
+  return guard(res)
 }

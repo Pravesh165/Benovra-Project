@@ -77,6 +77,7 @@ class BenefitDetectionListenerTest {
 
         Transaction reloaded = transactionRepository.findById(saved.getId()).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(TransactionStatus.NO_MATCH);
+        assertThat(reloaded.getMatchReason()).contains("no active benefit entitlements");
 
         // No match → no claim pre-filled.
         List<?> claims = claimRepository.findByTransactionId(saved.getId());

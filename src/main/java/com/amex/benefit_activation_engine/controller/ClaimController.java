@@ -51,10 +51,9 @@ public class ClaimController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a single claim",
-            description = "Returns the pre-filled claim with the given id (404 if unknown).")
-    public ClaimResponse getById(@PathVariable Long id) {
-        Claim claim = claimService.getById(id); // 404 if unknown
-        return ClaimResponse.from(claim);
+                        description = "Returns a claim to its owner or a reviewer (404 if unknown, 403 if not owned).")
+        public ClaimResponse getById(@PathVariable Long id, Authentication authentication) {
+                return ClaimResponse.from(getAccessibleClaim(id, authentication));
     }
 
     @PostMapping("/{id}/submit")
@@ -63,15 +62,7 @@ public class ClaimController {
                     + "rule: small claims are auto-approved and paid, larger ones go to review. "
                     + "CARD_MEMBERs may only submit their own claims (BOLA check).")
     public ClaimResponse submit(@PathVariable Long id, Authentication authentication) {
-        // BOLA ownership guard: CARD_MEMBERs may only submit their own claims.
-        if (authentication != null && isCardMember(authentication)) {
-            Claim claim = claimService.getById(id); // throws 404 if not found
-            String callerId = authentication.getName();
-            if (!callerId.equals(claim.getTransaction().getCardMemberId())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "You may only submit your own claims.");
-            }
-        }
+                getAccessibleClaim(id, authentication);
         return ClaimResponse.from(workflowService.submit(id));
     }
 
@@ -100,4 +91,17 @@ public class ClaimController {
         return auth.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_" + Roles.CARD_MEMBER));
     }
+
+        private Claim getAccessibleClaim(Long claimId, Authentication authentication) {
+                Claim claim = claimService.getById(claimId);
+                if (authentication.getAuthorities().stream()
+                                .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + Roles.REVIEWER))) {
+                        return claim;
+                }
+                if (isCardMember(authentication)
+                                && authentication.getName().equals(claim.getTransaction().getCardMemberId())) {
+                        return claim;
+                }
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You may only access your own claims.");
+        }
 }

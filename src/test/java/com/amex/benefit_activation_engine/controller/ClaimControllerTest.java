@@ -104,6 +104,7 @@ class ClaimControllerTest {
                 .andExpect(jsonPath("$.status").value("PREFILLED"))
                 .andExpect(jsonPath("$.benefitName").value("Purchase Protection"))
                 .andExpect(jsonPath("$.currency").value("USD"))
+                .andExpect(jsonPath("$.coverageExpiresOn").value("2026-10-18"))
                 .andExpect(jsonPath("$.prefilledData.incidentType").value("DAMAGE_OR_THEFT"))
                 .andExpect(jsonPath("$.prefilledData.itemDescription").value("MacBook Pro 14"));
     }

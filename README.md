@@ -132,6 +132,8 @@ stateDiagram-v2
 ### 👀 WATCH — Ingestion (`IngestionService`)
 - **Single ingestion funnel:** manual REST calls, the scheduled feed, and the Stripe webhook all
   converge on `IngestionService.ingest(...)`, so behavior is identical regardless of source.
+- **Webhook authentication:** `/api/stripe/webhook` validates Stripe's timestamped HMAC signature
+  against `STRIPE_WEBHOOK_SECRET` and rejects missing, invalid, or older-than-five-minute signatures.
 - **Validation + normalization** on every purchase (e.g. card-product casing) before it's saved
   as `VALIDATED`.
 - **Event-driven detection:** ingestion publishes a `TransactionIngestedEvent`; matching runs on
@@ -146,6 +148,8 @@ stateDiagram-v2
   — so the most valuable benefit is offered first.
 - **Handles no-match and multiple-match** cleanly. Qualifying categories are **externalized to
   `application.yml`** and editable with zero code changes.
+- **Explains `NO_MATCH`:** transaction records distinguish missing data, unavailable entitlements,
+  unsupported merchant category, and expired coverage; API responses expose `matchReason`.
 
 ### 📝 PRE-FILL — Claim Generation (`ClaimService`)
 - Builds a `Claim` auto-populated from the transaction + matched benefit, saved as `PREFILLED`.
@@ -158,6 +162,8 @@ stateDiagram-v2
 - **Auto-decision:** claims at or below the configured threshold auto-approve on submit; larger
   ones route to manual review.
 - **Entitlement re-checked on submit** — a revoked benefit throws `ClaimNotEntitled` (409).
+- **Coverage window re-checked on submit** — expired purchase/return claims remain unsubmitted and
+  return 409; travel-delay claims remain event-based.
 - **Payout** delegates to a `BankClient` interface (`MockBankClient` in the prototype) and moves
   the claim to `PAID` with a payout reference.
 - **Append-only audit trail:** every transition records who / what / why (`SYSTEM`, `REVIEWER`,
@@ -182,7 +188,7 @@ stateDiagram-v2
 |-------|------------|
 | Runtime | **Spring Boot 4.1.0** on **Java 21** |
 | Web / API | Spring Web MVC (REST) |
-| Data access | Spring Data JPA + Hibernate |
+| Data access | Spring Data JPA + Hibernate + Flyway |
 | Database | H2 in-memory (demo) → PostgreSQL (prod-ready) |
 | Validation | Jakarta Bean Validation |
 | Security | Spring Security + JWT (`jjwt` 0.12.6) |
@@ -378,7 +384,16 @@ auth:
   jwt:
     secret: ${AUTH_JWT_SECRET:change-me-...}   # override via env in real deployments
     expiry-minutes: ${AUTH_JWT_EXPIRY_MINUTES:120}
+
+stripe:
+  webhook:
+    secret: ${STRIPE_WEBHOOK_SECRET:}   # required to accept Stripe webhook requests
 ```
+
+Flyway applies versioned SQL from `src/main/resources/db/migration` before Hibernate validates
+the schema. Hibernate does not create or update tables. V1 defines core tables, foreign keys,
+uniqueness constraints, and indexes for member claims, workflow queues, entitlements, audit events,
+and claim documents.
 
 ---
 
@@ -413,16 +428,24 @@ Run the full suite:
 ./mvnw test        # or mvnw.cmd test on Windows
 ```
 
+Run frontend tests and production build:
+
+```bash
+cd frontend
+npm test
+npm run build
+```
+
 Coverage spans every layer — JUnit 5 + Mockito:
 
-- **Engine** — detection accuracy and ranking (`SimpleRuleEngineTest`), event-driven detection
-  (`BenefitDetectionListenerTest`).
+- **Engine** — detection accuracy, ranking, coverage windows, and event-driven `NO_MATCH` reasons
+  (`SimpleRuleEngineTest`, `BenefitDetectionListenerTest`, `CoverageWindowPolicyTest`).
 - **Services** — pre-fill quality (`ClaimServiceTest`), state-machine + illegal-transition
   rejection (`ClaimWorkflowServiceTest`), metrics (`MetricsServiceTest`).
 - **Controllers** — per-member scoping (`MeClaimControllerTest`), reviewer queue/search
   (`AdminClaimControllerTest`), and a full end-to-end flow
   (`FullClaimFlowIntegrationTest`: ingest → detect → pre-fill → submit → approve).
-- **Integration** — Stripe mapping (`StripeTransactionAdapterTest`), feed selection and drip
+- **Integration** — signed Stripe webhook verification, Stripe mapping (`StripeTransactionAdapterTest`), feed selection and drip
   behavior, and JPA persistence.
 
 ---

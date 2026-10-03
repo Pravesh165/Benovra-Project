@@ -7,6 +7,9 @@ import react from '@vitejs/plugin-react'
 // serves the UI and the API together on :8080.
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: 'jsdom',
+  },
   server: {
     port: 5173,
     proxy: {

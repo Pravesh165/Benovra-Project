@@ -46,6 +46,7 @@ public class BenefitDetectionListener {
 
         List<Benefit> matches = ruleEngine.match(transaction);
         transaction.setStatus(matches.isEmpty() ? TransactionStatus.NO_MATCH : TransactionStatus.MATCHED);
+        transaction.setMatchReason(matches.isEmpty() ? ruleEngine.explainNoMatch(transaction) : null);
         transactionRepository.save(transaction);
 
         // PRE-FILL: auto-generate a claim for the best (top-ranked) matched benefit.

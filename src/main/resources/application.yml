@@ -12,11 +12,13 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
         format_sql: true
+        type:
+          preferred_enum_jdbc_type: VARCHAR
 
   # ---- H2 web console (Boot 4: backed by the spring-boot-h2console module) ----
   h2:
@@ -44,6 +46,10 @@ springdoc:
 
 server:
   port: 8080
+
+stripe:
+  webhook:
+    secret: ${STRIPE_WEBHOOK_SECRET:}
 
 # ---- Customer authentication (JWT) ----
 # Demo identity tokens for the customer UI: a card member "logs in" with just
@@ -92,3 +98,5 @@ matching:
 # larger claims are routed to manual review.
 workflow:
   auto-approve-threshold: 700.00
+  expiration-warning-days: 7
+  expiration-scan-interval-ms: 3600000

@@ -58,7 +58,7 @@ public class SecurityConfig {
                         // Auth endpoints (login / token refresh / register).
                         .requestMatchers("/api/auth/**").permitAll()
                         // Stripe webhook (signature verified inside the controller).
-                        .requestMatchers("/stripe/**").permitAll()
+                        .requestMatchers("/api/stripe/**").permitAll()
                         // Demo feed admin toggle (no auth required to keep demos simple).
                         .requestMatchers("/api/admin/feed/**").permitAll()
                         // Benefit catalogue and entitlement lookup (read-only, non-sensitive).
