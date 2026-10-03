@@ -71,6 +71,31 @@ export async function fetchMyClaims(status) {
   return guard(res)
 }
 
+export async function updateClaimDraft(id, draftData) {
+  const res = await fetch(`/api/me/claims/${id}`, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(draftData),
+  })
+  return guard(res)
+}
+
+export async function switchClaimBenefit(claimId, benefitId) {
+  const res = await fetch(`/api/me/claims/${claimId}/switch-benefit?benefitId=${encodeURIComponent(benefitId)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return guard(res)
+}
+
+export async function fetchMatchedBenefits(transactionId) {
+  const res = await fetch(`/api/benefits/${transactionId}`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) throw new Error(await readError(res))
+  return res.json()
+}
+
 export async function submitClaim(id) {
   const res = await fetch(`/api/me/claims/${id}/submit`, {
     method: 'POST',

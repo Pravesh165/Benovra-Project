@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { fetchMyClaims, submitClaim, SessionExpiredError } from './api.js'
 import { statusLabel } from './format.js'
 import ClaimCard from './ClaimCard.jsx'
+import ClaimReviewWizard from './ClaimReviewWizard.jsx'
 
 const TABS = { TODO: 'todo', SUBMITTED: 'submitted' }
 
@@ -12,6 +13,7 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [selectedClaimForReview, setSelectedClaimForReview] = useState(null)
 
   const loadClaims = useCallback(async () => {
     setLoading(true)
@@ -30,13 +32,18 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
 
   useEffect(() => { loadClaims() }, [loadClaims])
 
-  async function handleSubmit(claim) {
+  function handleOpenReview(claim) {
+    setSelectedClaimForReview(claim)
+  }
+
+  async function handleClaimSubmitted(claim) {
     setNotice('')
     setError('')
     try {
       const updated = await submitClaim(claim.id)
-      const item = claim.prefilledData?.itemDescription || claim.benefitName || 'your purchase'
+      const item = updated.prefilledData?.itemDescription || updated.benefitName || 'your purchase'
       setNotice(`Claim for ${item} submitted — status is now ${statusLabel(updated.status)}.`)
+      setSelectedClaimForReview(null)
       await loadClaims()
       setTab(TABS.SUBMITTED)
     } catch (err) {
@@ -96,12 +103,20 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
                 key={claim.id}
                 claim={claim}
                 showSubmit={tab === TABS.TODO}
-                onSubmit={() => handleSubmit(claim)}
+                onSubmit={() => handleOpenReview(claim)}
               />
             ))}
           </div>
         )}
       </main>
+
+      {selectedClaimForReview && (
+        <ClaimReviewWizard
+          claim={selectedClaimForReview}
+          onClose={() => setSelectedClaimForReview(null)}
+          onSubmitted={handleClaimSubmitted}
+        />
+      )}
     </div>
   )
 }

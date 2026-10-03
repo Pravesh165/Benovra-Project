@@ -6,6 +6,8 @@ import com.amex.benefit_activation_engine.model.Claim;
 import com.amex.benefit_activation_engine.model.ClaimAuditEvent;
 import com.amex.benefit_activation_engine.model.ClaimStatus;
 import com.amex.benefit_activation_engine.model.Transaction;
+import com.amex.benefit_activation_engine.engine.RuleEngine;
+import com.amex.benefit_activation_engine.repository.BenefitRepository;
 import com.amex.benefit_activation_engine.repository.ClaimRepository;
 import com.amex.benefit_activation_engine.repository.ClaimAuditRepository;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +45,8 @@ public class ClaimService {
 
     private final ClaimRepository claimRepository;
     private final ClaimAuditRepository auditRepository;
+    private final BenefitRepository benefitRepository;
+    private final RuleEngine ruleEngine;
 
     // ---- Pre-filled field keys (stable contract shared with the UI) ----
     static final String FIELD_CARD_MEMBER_ID = "cardMemberId";
@@ -146,6 +150,95 @@ public class ClaimService {
             throw new ClaimAccessDeniedException(id);
         }
         return claim;
+    }
+
+    /**
+     * Updates editable details (item description, incident date, incident explanation)
+     * of a PREFILLED claim.
+     *
+     * @throws IllegalClaimTransitionException if the claim has already been submitted or decided
+     */
+    @Transactional
+    public Claim updateDraft(Long id,
+                             String itemDescription,
+                             String incidentDate,
+                             String incidentExplanation,
+                             Map<String, String> additionalFields) {
+        Claim claim = getById(id);
+        if (claim.getStatus() != ClaimStatus.PREFILLED) {
+            throw new IllegalClaimTransitionException(id, claim.getStatus(), ClaimStatus.PREFILLED);
+        }
+
+        Map<String, String> data = claim.getPrefilledData();
+        if (data == null) {
+            data = new LinkedHashMap<>();
+            claim.setPrefilledData(data);
+        }
+
+        if (StringUtils.hasText(itemDescription)) {
+            data.put(FIELD_ITEM_DESCRIPTION, itemDescription.trim());
+        }
+        if (StringUtils.hasText(incidentDate)) {
+            data.put("incidentDate", incidentDate.trim());
+        }
+        if (StringUtils.hasText(incidentExplanation)) {
+            data.put("incidentExplanation", incidentExplanation.trim());
+        }
+        if (additionalFields != null) {
+            for (Map.Entry<String, String> entry : additionalFields.entrySet()) {
+                String k = entry.getKey();
+                String v = entry.getValue();
+                if (StringUtils.hasText(k) && StringUtils.hasText(v)) {
+                    data.put(k.trim(), v.trim());
+                }
+            }
+        }
+
+        return claimRepository.save(claim);
+    }
+
+    /**
+     * Switches a PREFILLED claim to another benefit that the transaction qualifies for.
+     * Re-runs the matching engine to ensure the transaction is legitimately entitled to the new benefit,
+     * recalculates the capped claim amount, re-populates the prefilled data, and saves.
+     *
+     * @throws IllegalClaimTransitionException if the claim is no longer PREFILLED
+     * @throws ClaimNotEntitledException if the new benefit is not in the transaction's matched benefits
+     */
+    @Transactional
+    public Claim switchBenefit(Long claimId, Long newBenefitId) {
+        Claim claim = getById(claimId);
+        if (claim.getStatus() != ClaimStatus.PREFILLED) {
+            throw new IllegalClaimTransitionException(claimId, claim.getStatus(), ClaimStatus.PREFILLED);
+        }
+
+        Transaction transaction = claim.getTransaction();
+        if (transaction == null) {
+            throw new IllegalArgumentException("Claim " + claimId + " has no associated transaction");
+        }
+
+        Benefit targetBenefit = benefitRepository.findById(newBenefitId)
+                .orElseThrow(() -> new IllegalArgumentException("Benefit " + newBenefitId + " not found"));
+
+        // Validate that targetBenefit is among the eligible benefits for this transaction
+        List<Benefit> eligibleMatches = ruleEngine.match(transaction);
+        boolean isEligible = eligibleMatches.stream().anyMatch(b -> b.getId().equals(newBenefitId));
+        if (!isEligible) {
+            throw new ClaimNotEntitledException(claimId, transaction.getCardProduct(), targetBenefit.getName());
+        }
+
+        // Update benefit, claimAmount, and rebuild prefilledData
+        claim.setBenefit(targetBenefit);
+        BigDecimal newClaimAmount = cappedClaimAmount(targetBenefit, transaction);
+        claim.setClaimAmount(newClaimAmount);
+
+        Map<String, String> newPrefilled = buildPrefilledData(transaction, targetBenefit, newClaimAmount);
+        assertPrefillComplete(targetBenefit.getType(), newPrefilled);
+        claim.setPrefilledData(newPrefilled);
+
+        log.info("Claim {} switched to benefit {} ({}) for transaction {}",
+                claimId, targetBenefit.getName(), targetBenefit.getType(), transaction.getId());
+        return claimRepository.save(claim);
     }
 
     /**

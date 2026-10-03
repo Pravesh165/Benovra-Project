@@ -1,16 +1,20 @@
 package com.amex.benefit_activation_engine.controller;
 
 import com.amex.benefit_activation_engine.dto.ClaimResponse;
+import com.amex.benefit_activation_engine.dto.UpdateClaimDraftRequest;
 import com.amex.benefit_activation_engine.model.ClaimStatus;
 import com.amex.benefit_activation_engine.service.ClaimService;
 import com.amex.benefit_activation_engine.service.ClaimWorkflowService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,6 +29,7 @@ import java.util.List;
  * <ul>
  *   <li>{@code GET /api/me/claims?status=PREFILLED} — "Claims to make"
  *       (drop the filter, or use other statuses, for "Submitted claims").</li>
+ *   <li>{@code PUT /api/me/claims/{id}} — edit draft claim details before submit.</li>
  *   <li>{@code POST /api/me/claims/{id}/submit} — submit one of the member's own
  *       pre-filled claims (403 if the claim belongs to someone else).</li>
  * </ul>
@@ -48,6 +53,36 @@ public class MeClaimController {
         return claimService.findForCardMember(cardMemberId, status).stream()
                 .map(ClaimResponse::from)
                 .toList();
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Update a draft claim",
+            description = "Updates editable details (item description, incident date, incident explanation) "
+                    + "of a PREFILLED claim owned by the authenticated card member. Returns 403 if owned by another member.")
+    public ClaimResponse updateDraft(@PathVariable Long id,
+                                     @Valid @RequestBody UpdateClaimDraftRequest request,
+                                     Authentication authentication) {
+        String cardMemberId = authentication.getName();
+        claimService.getOwnedBy(id, cardMemberId); // 404 if unknown, 403 if not owned
+        return ClaimResponse.from(claimService.updateDraft(
+                id,
+                request.itemDescription(),
+                request.incidentDate(),
+                request.incidentExplanation(),
+                request.additionalFields()
+        ));
+    }
+
+    @PostMapping("/{id}/switch-benefit")
+    @Operation(summary = "Switch a claim to an alternative benefit",
+            description = "Switches a PREFILLED claim to another benefit that the purchase qualifies for. "
+                    + "Returns 403 if owned by another member, or 409 if the benefit is not entitled.")
+    public ClaimResponse switchBenefit(@PathVariable Long id,
+                                       @RequestParam Long benefitId,
+                                       Authentication authentication) {
+        String cardMemberId = authentication.getName();
+        claimService.getOwnedBy(id, cardMemberId); // 404 if unknown, 403 if not owned
+        return ClaimResponse.from(claimService.switchBenefit(id, benefitId));
     }
 
     @PostMapping("/{id}/submit")

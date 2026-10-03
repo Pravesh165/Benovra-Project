@@ -153,4 +153,39 @@ class ClaimServiceTest {
                 .hasMessageContaining("cardMemberId")
                 .hasMessageContaining("incidentType");
     }
+
+    @Test
+    void updateDraft_updatesEditableFieldsSuccessfully() {
+        Transaction txn = saveTxn("ELECTRONICS", "500.00", "MacBook Pro 14");
+        Claim claim = claimService.generateFor(txn, benefit(BenefitType.PURCHASE_PROTECTION));
+
+        Claim updated = claimService.updateDraft(
+                claim.getId(),
+                "Custom Laptop Name",
+                "2026-07-22",
+                "Item was damaged during transport",
+                Map.of("userNote", "Checked with courier")
+        );
+
+        assertThat(updated.getPrefilledData().get("itemDescription")).isEqualTo("Custom Laptop Name");
+        assertThat(updated.getPrefilledData().get("incidentDate")).isEqualTo("2026-07-22");
+        assertThat(updated.getPrefilledData().get("incidentExplanation")).isEqualTo("Item was damaged during transport");
+        assertThat(updated.getPrefilledData().get("userNote")).isEqualTo("Checked with courier");
+    }
+
+    @Test
+    void switchBenefit_switchesClaimToAlternativeMatchedBenefit() {
+        // ELECTRONICS transaction on PLATINUM matches both PURCHASE_PROTECTION and RETURN_PROTECTION
+        Transaction txn = saveTxn("ELECTRONICS", "400.00", "Bose Headphones");
+        Benefit purchaseBenefit = benefit(BenefitType.PURCHASE_PROTECTION);
+        Benefit returnBenefit = benefit(BenefitType.RETURN_PROTECTION);
+
+        Claim claim = claimService.generateFor(txn, purchaseBenefit);
+        assertThat(claim.getBenefit().getType()).isEqualTo(BenefitType.PURCHASE_PROTECTION);
+
+        Claim switched = claimService.switchBenefit(claim.getId(), returnBenefit.getId());
+        assertThat(switched.getBenefit().getType()).isEqualTo(BenefitType.RETURN_PROTECTION);
+        assertThat(switched.getPrefilledData().get("returnReason")).isEqualTo("MERCHANT_REFUSED_RETURN");
+        assertThat(switched.getPrefilledData().get("benefitName")).isEqualTo("Return Protection");
+    }
 }

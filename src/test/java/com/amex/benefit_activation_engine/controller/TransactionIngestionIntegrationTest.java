@@ -1,5 +1,7 @@
 package com.amex.benefit_activation_engine.controller;
 
+import com.amex.benefit_activation_engine.security.JwtService;
+import com.amex.benefit_activation_engine.security.Roles;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +18,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * End-to-end test of the Phase 2a ingestion endpoints through the web layer:
  * validation, normalization, persistence, and error responses.
+ *
+ * <p>Auth: POST /api/transactions is public (webhook / demo feed).
+ * GET /api/transactions/** requires REVIEWER role.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -24,6 +29,8 @@ class TransactionIngestionIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+    @Autowired
+    private JwtService jwtService;
 
     private static final String VALID_BODY = """
             {
@@ -38,8 +45,13 @@ class TransactionIngestionIntegrationTest {
             }
             """;
 
+    private String reviewerToken() {
+        return "Bearer " + jwtService.issueToken("admin", Roles.REVIEWER);
+    }
+
     @Test
     void ingest_validRequest_returns201_normalizesCasing_andMarksValidated() throws Exception {
+        // POST /api/transactions is public — no auth header needed.
         mockMvc.perform(post("/api/transactions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_BODY))
@@ -66,6 +78,7 @@ class TransactionIngestionIntegrationTest {
                 }
                 """;
 
+        // Validation happens before auth — no auth header needed.
         mockMvc.perform(post("/api/transactions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalid))
@@ -83,7 +96,9 @@ class TransactionIngestionIntegrationTest {
                         .content(VALID_BODY))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/transactions"))
+        // GET /api/transactions requires REVIEWER role.
+        mockMvc.perform(get("/api/transactions")
+                        .header("Authorization", reviewerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].cardMemberId").value("CM-2001"))
                 .andExpect(jsonPath("$[0].cardProduct").value("PLATINUM"));
@@ -91,8 +106,15 @@ class TransactionIngestionIntegrationTest {
 
     @Test
     void getById_unknownId_returns404() throws Exception {
-        mockMvc.perform(get("/api/transactions/{id}", 999999L))
+        mockMvc.perform(get("/api/transactions/{id}", 999999L)
+                        .header("Authorization", reviewerToken()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Not found"));
+    }
+
+    @Test
+    void listTransactions_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/api/transactions"))
+                .andExpect(status().isUnauthorized());
     }
 }

@@ -142,4 +142,71 @@ class MeClaimControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.title").value("Forbidden"));
     }
+
+    @Test
+    void updateDraft_ownClaim_updatesDetails() throws Exception {
+        Claim claim = prefillClaimFor(ALICE, "MacBook Pro 14", "499.99");
+
+        String body = """
+                {
+                  "itemDescription": "MacBook Pro 14 M3 Space Gray",
+                  "incidentDate": "2026-07-25",
+                  "incidentExplanation": "Screen cracked during transit",
+                  "additionalFields": {
+                    "caseNumber": "CAS-99881"
+                  }
+                }
+                """;
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/me/claims/{id}", claim.getId())
+                        .header("Authorization", bearerFor(ALICE))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(claim.getId()))
+                .andExpect(jsonPath("$.prefilledData.itemDescription").value("MacBook Pro 14 M3 Space Gray"))
+                .andExpect(jsonPath("$.prefilledData.incidentDate").value("2026-07-25"))
+                .andExpect(jsonPath("$.prefilledData.incidentExplanation").value("Screen cracked during transit"))
+                .andExpect(jsonPath("$.prefilledData.caseNumber").value("CAS-99881"));
+    }
+
+    @Test
+    void updateDraft_othersClaim_isForbidden() throws Exception {
+        Claim bobsClaim = prefillClaimFor(BOB, "Sony TV", "600.00");
+
+        String body = "{\"itemDescription\":\"Hacked item\"}";
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/me/claims/{id}", bobsClaim.getId())
+                        .header("Authorization", bearerFor(ALICE))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.title").value("Forbidden"));
+    }
+
+    @Test
+    void switchBenefit_ownClaim_switchesToEligibleBenefit() throws Exception {
+        Claim claim = prefillClaimFor(ALICE, "Headphones", "300.00");
+        Benefit returnBenefit = benefitRepository.findByType(BenefitType.RETURN_PROTECTION).orElseThrow();
+
+        mockMvc.perform(post("/api/me/claims/{id}/switch-benefit", claim.getId())
+                        .param("benefitId", returnBenefit.getId().toString())
+                        .header("Authorization", bearerFor(ALICE)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(claim.getId()))
+                .andExpect(jsonPath("$.benefitType").value("RETURN_PROTECTION"))
+                .andExpect(jsonPath("$.benefitName").value("Return Protection"));
+    }
+
+    @Test
+    void switchBenefit_othersClaim_isForbidden() throws Exception {
+        Claim bobsClaim = prefillClaimFor(BOB, "Sony TV", "600.00");
+        Benefit returnBenefit = benefitRepository.findByType(BenefitType.RETURN_PROTECTION).orElseThrow();
+
+        mockMvc.perform(post("/api/me/claims/{id}/switch-benefit", bobsClaim.getId())
+                        .param("benefitId", returnBenefit.getId().toString())
+                        .header("Authorization", bearerFor(ALICE)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.title").value("Forbidden"));
+    }
 }

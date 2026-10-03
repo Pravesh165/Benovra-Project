@@ -7,6 +7,8 @@ import com.amex.benefit_activation_engine.model.Transaction;
 import com.amex.benefit_activation_engine.model.TransactionStatus;
 import com.amex.benefit_activation_engine.repository.BenefitRepository;
 import com.amex.benefit_activation_engine.repository.TransactionRepository;
+import com.amex.benefit_activation_engine.security.JwtService;
+import com.amex.benefit_activation_engine.security.Roles;
 import com.amex.benefit_activation_engine.service.ClaimService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +27,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Verifies the PRE-FILL API: GET /api/claims (list) and GET /api/claims/{id}
  * (single), including the auto-populated field map and a 404 for unknown ids.
+ *
+ * <p>Auth: GET /api/claims requires REVIEWER role; GET /api/claims/{id} requires
+ * any authenticated user. Tests use the JWT token pattern (same as
+ * {@link AdminClaimControllerTest}) rather than {@code @WithMockUser} to be
+ * compatible with the custom {@link com.amex.benefit_activation_engine.security.JwtAuthFilter}.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -34,11 +41,25 @@ class ClaimControllerTest {
     @Autowired
     private MockMvc mockMvc;
     @Autowired
+    private JwtService jwtService;
+    @Autowired
     private ClaimService claimService;
     @Autowired
     private BenefitRepository benefitRepository;
     @Autowired
     private TransactionRepository transactionRepository;
+
+    // ── token helpers ────────────────────────────────────────────────────────────
+
+    private String reviewerToken() {
+        return "Bearer " + jwtService.issueToken("admin", Roles.REVIEWER);
+    }
+
+    private String memberToken(String cardMemberId) {
+        return "Bearer " + jwtService.issueToken(cardMemberId);
+    }
+
+    // ── test data ────────────────────────────────────────────────────────────────
 
     private Claim prefillPurchaseClaim() {
         Transaction txn = transactionRepository.save(Transaction.builder()
@@ -56,11 +77,14 @@ class ClaimControllerTest {
         return claimService.generateFor(txn, benefit);
     }
 
+    // ── tests ────────────────────────────────────────────────────────────────────
+
     @Test
     void listReturnsPrefilledClaims() throws Exception {
         Claim claim = prefillPurchaseClaim();
 
-        mockMvc.perform(get("/api/claims"))
+        mockMvc.perform(get("/api/claims")
+                        .header("Authorization", reviewerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(claim.getId()))
@@ -73,7 +97,8 @@ class ClaimControllerTest {
     void getByIdReturnsClaimWithPrefilledData() throws Exception {
         Claim claim = prefillPurchaseClaim();
 
-        mockMvc.perform(get("/api/claims/{id}", claim.getId()))
+        mockMvc.perform(get("/api/claims/{id}", claim.getId())
+                        .header("Authorization", memberToken("CM-1001")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(claim.getId()))
                 .andExpect(jsonPath("$.status").value("PREFILLED"))
@@ -85,8 +110,22 @@ class ClaimControllerTest {
 
     @Test
     void unknownClaim_returns404() throws Exception {
-        mockMvc.perform(get("/api/claims/{id}", 999999L))
+        mockMvc.perform(get("/api/claims/{id}", 999999L)
+                        .header("Authorization", memberToken("CM-1001")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Not found"));
+    }
+
+    @Test
+    void listClaims_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/api/claims"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void listClaims_withCardMemberToken_returns403() throws Exception {
+        mockMvc.perform(get("/api/claims")
+                        .header("Authorization", memberToken("CM-1001")))
+                .andExpect(status().isForbidden());
     }
 }
