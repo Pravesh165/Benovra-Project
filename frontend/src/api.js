@@ -195,3 +195,13 @@ export async function fetchTransactions(status) {
   const res = await fetch(`/api/transactions${query}`, { headers: authHeaders() })
   return guard(res)
 }
+
+export async function fetchPolicyKnowledge(query = '', cardProduct = '') {
+  const params = new URLSearchParams()
+  if (query) params.append('query', query)
+  if (cardProduct) params.append('cardProduct', cardProduct)
+  const qs = params.toString()
+  const res = await fetch(`/api/benefits/policy${qs ? `?${qs}` : ''}`, { headers: authHeaders() })
+  if (!res.ok) throw new Error(await readError(res))
+  return res.json()
+}
