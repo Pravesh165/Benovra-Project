@@ -67,4 +67,26 @@ class BenefitControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Not found"));
     }
+
+    @Test
+    void policyKnowledge_returnsAllActivePoliciesWithDetails() throws Exception {
+        mockMvc.perform(get("/api/benefits/policy"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].name").exists())
+                .andExpect(jsonPath("$[0].perClaimLimit").isNumber())
+                .andExpect(jsonPath("$[0].eligibleCategories").isArray())
+                .andExpect(jsonPath("$[0].exclusions").isArray())
+                .andExpect(jsonPath("$[0].requiredDocuments").isArray())
+                .andExpect(jsonPath("$[0].userEligibilityExplanation").isString());
+    }
+
+    @Test
+    void policyKnowledge_filtersByQueryAndCardProduct() throws Exception {
+        mockMvc.perform(get("/api/benefits/policy")
+                        .param("query", "electronics")
+                        .param("cardProduct", "PLATINUM"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.type == 'PURCHASE_PROTECTION')]").exists());
+    }
 }
