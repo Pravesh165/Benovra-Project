@@ -5,7 +5,9 @@ import ClaimCard from './ClaimCard.jsx'
 import ClaimReviewWizard from './ClaimReviewWizard.jsx'
 import { handleTabListKeydown } from './keyboard.js'
 
-const TABS = { TODO: 'todo', SUBMITTED: 'submitted' }
+import PolicyKnowledgeBase from './PolicyKnowledgeBase.jsx'
+
+const TABS = { TODO: 'todo', SUBMITTED: 'submitted', POLICY: 'policy' }
 
 export default function MemberApp({ cardMemberId, onSignOut }) {
   const [tab, setTab] = useState(TABS.TODO)
@@ -73,6 +75,9 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
     </div>
   )
 
+  const tabIds = ['member-tab-todo', 'member-tab-submitted', 'member-tab-policy']
+  const tabValues = [TABS.TODO, TABS.SUBMITTED, TABS.POLICY]
+
   return (
     <div className="app">
       <header className="topbar">
@@ -98,7 +103,7 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
             tabIndex={tab === TABS.TODO ? 0 : -1}
             className={tab === TABS.TODO ? 'tab tab-active' : 'tab'}
             onClick={() => setTab(TABS.TODO)}
-            onKeyDown={(event) => handleTabListKeydown(event, ['member-tab-todo', 'member-tab-submitted'], tab === TABS.TODO ? 0 : 1, (index) => setTab(index === 0 ? TABS.TODO : TABS.SUBMITTED))}
+            onKeyDown={(event) => handleTabListKeydown(event, tabIds, tabValues.indexOf(tab), (index) => setTab(tabValues[index]))}
           >
             Claims to make
             {toClaim.length > 0 && <span className="tab-count">{toClaim.length}</span>}
@@ -111,10 +116,22 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
             tabIndex={tab === TABS.SUBMITTED ? 0 : -1}
             className={tab === TABS.SUBMITTED ? 'tab tab-active' : 'tab'}
             onClick={() => setTab(TABS.SUBMITTED)}
-            onKeyDown={(event) => handleTabListKeydown(event, ['member-tab-todo', 'member-tab-submitted'], tab === TABS.TODO ? 0 : 1, (index) => setTab(index === 0 ? TABS.TODO : TABS.SUBMITTED))}
+            onKeyDown={(event) => handleTabListKeydown(event, tabIds, tabValues.indexOf(tab), (index) => setTab(tabValues[index]))}
           >
             Submitted claims
             {submitted.length > 0 && <span className="tab-count">{submitted.length}</span>}
+          </button>
+          <button
+            id="member-tab-policy"
+            role="tab"
+            aria-selected={tab === TABS.POLICY}
+            aria-controls="member-panel-policy"
+            tabIndex={tab === TABS.POLICY ? 0 : -1}
+            className={tab === TABS.POLICY ? 'tab tab-active' : 'tab'}
+            onClick={() => setTab(TABS.POLICY)}
+            onKeyDown={(event) => handleTabListKeydown(event, tabIds, tabValues.indexOf(tab), (index) => setTab(tabValues[index]))}
+          >
+            Policy Guide
           </button>
         </nav>
 
@@ -128,6 +145,7 @@ export default function MemberApp({ cardMemberId, onSignOut }) {
 
         <section id="member-panel-todo" role="tabpanel" aria-labelledby="member-tab-todo" tabIndex={0} hidden={tab !== TABS.TODO}>{tab === TABS.TODO && activePanel}</section>
         <section id="member-panel-submitted" role="tabpanel" aria-labelledby="member-tab-submitted" tabIndex={0} hidden={tab !== TABS.SUBMITTED}>{tab === TABS.SUBMITTED && activePanel}</section>
+        <section id="member-panel-policy" role="tabpanel" aria-labelledby="member-tab-policy" tabIndex={0} hidden={tab !== TABS.POLICY}>{tab === TABS.POLICY && <PolicyKnowledgeBase />}</section>
       </main>
 
       {selectedClaimForReview && (

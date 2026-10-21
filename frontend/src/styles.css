@@ -626,4 +626,37 @@ dialog.modal-card { position: static; margin: 0; color: var(--text); }
   to { opacity: 1; }
 }
 
+/* ---- Policy Knowledge Base ---- */
+.policy-kb-container { display: flex; flex-direction: column; gap: 20px; }
+.policy-kb-header { margin-bottom: 4px; }
+.policy-kb-title { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+.policy-kb-subtitle { margin: 0; color: var(--muted); font-size: 14px; }
+.policy-filter-bar { display: flex; gap: 12px; align-items: center; }
+.policy-search-input { flex: 1; }
+.policy-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 18px; }
+.policy-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+.policy-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+.policy-name { margin: 6px 0 4px; font-size: 16px; font-weight: 600; }
+.policy-desc { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.policy-limit-badge { background: #f0f7ff; border: 1px solid #cce3ff; border-radius: 8px; padding: 8px 12px; text-align: right; min-width: 110px; }
+.policy-limit-label { display: block; font-size: 11px; text-transform: uppercase; color: #0052cc; font-weight: 600; letter-spacing: 0.03em; }
+.policy-limit-val { font-size: 16px; font-weight: 700; color: #0b64d8; }
+.policy-explanation-box { background: #f8fafc; border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.45; }
+.policy-explanation-title { display: block; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 3px; }
+.policy-explanation-box p { margin: 0; }
+.policy-meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; background: #fff; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; }
+.policy-section { display: flex; flex-direction: column; gap: 6px; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.category-pill { background: #eef2f6; border-radius: 12px; padding: 3px 10px; font-size: 12px; font-weight: 500; color: #374151; }
+.policy-toggle-btn { text-align: left; font-size: 13px; font-weight: 500; color: var(--accent); padding: 4px 0; cursor: pointer; }
+.policy-expanded-details { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); }
+.policy-rules-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.rules-column h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text); }
+.policy-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.4; color: #374151; }
+.policy-list.exclusions { color: #b91c1c; }
+
+@media (max-width: 620px) {
+  .policy-card-grid { grid-template-columns: 1fr; }
+  .policy-rules-row { grid-template-columns: 1fr; gap: 12px; }
+}
 
