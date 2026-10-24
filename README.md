@@ -655,3 +655,6 @@ benefit-activation-engine/
 ├── docs/diagrams/     Architecture & flow diagrams (generated)
 └── src/main/resources/application.yml   central configuration
 ```
+
+This Application is Under Progress, so it needs to be improved at many places
+Open for any kind of suggestion/contribution.
