@@ -656,5 +656,6 @@ benefit-activation-engine/
 └── src/main/resources/application.yml   central configuration
 ```
 
-This Application is Under Progress, so it needs to be improved at many places
-Open for any kind of suggestion/contribution.
+- This Application is Under Progress, so it needs to be improved at many places.
+- Open for any kind of suggestion/contribution.
+- Just email me or connect through any social links mentioned already at profile. 
